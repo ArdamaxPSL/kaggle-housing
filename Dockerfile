@@ -7,3 +7,4 @@ RUN apt-get update && apt-get install -y \
     unzip \
     vim \
     && rm -rf /var/lib/apt/lists/*
+RUN pip install matplotlib

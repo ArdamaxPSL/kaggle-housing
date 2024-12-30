@@ -30,7 +30,6 @@ def download_dataset(competition_name: str, download_path: str = "data") -> None
         print(f"Error: {zip_path} not found.")
 
 def load_data(competition_name: str, data_path: str = "data") -> tuple[TensorDataset, TensorDataset]:
-    """Loads training and test datasets. Downloads if not found. Returns training and testing data as TensorDatasets"""
     data_path = Path(data_path)
     train_path = data_path / "train.csv"
     
@@ -42,42 +41,52 @@ def load_data(competition_name: str, data_path: str = "data") -> tuple[TensorDat
     train_dataframe = pd.read_csv(data_path / "train.csv")
     test_dataframe = pd.read_csv(data_path / "test.csv")
     
-    # Preprocess the data (Make sure only numerical values in x_train)
-    # 1. Identify numeric and categorical columns
+    # 1. Handle missing values first
+    train_dataframe = train_dataframe.fillna(0)  # Fill NA with 0
+    test_dataframe = test_dataframe.fillna(0)    # Fill NA with 0
+    
+    # 2. Separate numeric and categorical columns
     numeric_columns = train_dataframe.select_dtypes(include=['int64', 'float64']).columns
     categorical_columns = train_dataframe.select_dtypes(include=['object']).columns
     
-    # 2. Handle categorical columns (convert categorical to 1s and 0s)
+    # 3. Process training data
+    # Save target variable
+    y_train = train_dataframe['SalePrice'].values
+    
+    # Remove SalePrice from features
+    if 'SalePrice' in numeric_columns:
+        numeric_columns = numeric_columns.drop('SalePrice')
+    
+    # Convert categorical columns to dummy variables
     train_categorical = pd.get_dummies(train_dataframe[categorical_columns], drop_first=True)
     test_categorical = pd.get_dummies(test_dataframe[categorical_columns], drop_first=True)
     
-    # 3. Combine numeric and encoded categorical data
-    y_train = train_dataframe['SalePrice'].values  # Save target variable (What we pre)
+    # Get numeric features
+    train_numeric = train_dataframe[numeric_columns].astype('float32')  # Convert to float32
+    test_numeric = test_dataframe[numeric_columns].astype('float32')    # Convert to float32
     
-    # Remove SalePrice from numeric columns if it's there
-    numeric_columns = numeric_columns.drop('SalePrice') if 'SalePrice' in numeric_columns else numeric_columns
-    
-    train_numeric = train_dataframe[numeric_columns]
-    test_numeric = test_dataframe[numeric_columns]
-    
-    # Combine numeric and categorical features
+    # Combine features
     X_train_processed = pd.concat([train_numeric, train_categorical], axis=1)
     X_test_processed = pd.concat([test_numeric, test_categorical], axis=1)
     
-    # Ensure both datasets have the same columns
+    # Ensure columns match
     missing_cols = set(X_train_processed.columns) - set(X_test_processed.columns)
     for col in missing_cols:
         X_test_processed[col] = 0
     X_test_processed = X_test_processed[X_train_processed.columns]
+    
+    # Convert to float32 to ensure compatibility
+    X_train_processed = X_train_processed.astype('float32')
+    X_test_processed = X_test_processed.astype('float32')
     
     print("Data processed successfully!")
     print(f"Training data shape: {X_train_processed.shape[0]} samples with {X_train_processed.shape[1]} features")
     print(f"Test data shape: {X_test_processed.shape[0]} samples with {X_test_processed.shape[1]} features")
 
     # Convert to tensors
-    x_train = torch.FloatTensor(X_train_processed.values)
-    y_train = torch.FloatTensor(y_train)
-    x_test = torch.FloatTensor(X_test_processed.values)
+    x_train = torch.from_numpy(X_train_processed.values)  # Using from_numpy instead of FloatTensor
+    y_train = torch.from_numpy(y_train.astype('float32'))  # Convert target to float32
+    x_test = torch.from_numpy(X_test_processed.values)
     
     # Create TensorDatasets
     train_data = TensorDataset(x_train, y_train)
